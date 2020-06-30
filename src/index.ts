@@ -9,6 +9,7 @@ import { cliInit, printAvailableTemplates } from "aws-cdk/lib/init";
 import { data, print } from "aws-cdk/lib/logging";
 import { Configuration } from "aws-cdk/lib/settings";
 import * as version from "aws-cdk/lib/version";
+import { RequireApproval } from "aws-cdk/lib/diff";
 
 export async function CdkUtil(app: any, command: string, args: any): Promise<number | string | {} | void> {
   const aws = await SdkProvider.withAwsCliCompatibleDefaults({ ec2creds: true });
@@ -63,7 +64,7 @@ export async function CdkUtil(app: any, command: string, args: any): Promise<num
         toolkitStackName,
         roleArn: args.roleArn,
         notificationArns: args.notificationArns,
-        requireApproval: configuration.settings.get(["requireApproval"]),
+        requireApproval: RequireApproval.Never,
         reuseAssets: args["build-exclude"],
         tags: configuration.settings.get(["tags"]),
         sdk: aws,

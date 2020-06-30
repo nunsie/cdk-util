@@ -26,6 +26,8 @@ var _settings = require("aws-cdk/lib/settings");
 
 var version = _interopRequireWildcard(require("aws-cdk/lib/version"));
 
+var _diff = require("aws-cdk/lib/diff");
+
 function _getRequireWildcardCache() { if (typeof WeakMap !== "function") return null; var cache = new WeakMap(); _getRequireWildcardCache = function () { return cache; }; return cache; }
 
 function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } if (obj === null || typeof obj !== "object" && typeof obj !== "function") { return { default: obj }; } var cache = _getRequireWildcardCache(); if (cache && cache.has(obj)) { return cache.get(obj); } var newObj = {}; var hasPropertyDescriptor = Object.defineProperty && Object.getOwnPropertyDescriptor; for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { var desc = hasPropertyDescriptor ? Object.getOwnPropertyDescriptor(obj, key) : null; if (desc && (desc.get || desc.set)) { Object.defineProperty(newObj, key, desc); } else { newObj[key] = obj[key]; } } } newObj.default = obj; if (cache) { cache.set(obj, newObj); } return newObj; }
@@ -88,7 +90,7 @@ async function CdkUtil(app, command, args) {
         toolkitStackName,
         roleArn: args.roleArn,
         notificationArns: args.notificationArns,
-        requireApproval: configuration.settings.get(["requireApproval"]),
+        requireApproval: _diff.RequireApproval.Never,
         reuseAssets: args["build-exclude"],
         tags: configuration.settings.get(["tags"]),
         sdk: aws,
