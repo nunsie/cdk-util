@@ -1,119 +1,99 @@
-import * as core from '@aws-cdk/core';
-import {RequireApproval} from 'aws-cdk/lib/diff';
-import {CloudFormation} from 'aws-sdk';
-import {Configuration} from 'aws-cdk/lib/settings';
-import {CdkToolkit} from 'aws-cdk/lib/cdk-toolkit';
-import {AppStacks, DefaultSelection, ExtendedStackSelection, Tag} from 'aws-cdk/lib/api/cxapp/stacks';
-import {CloudFormationDeploymentTarget} from 'aws-cdk/lib/api/deployment-target';
-import {Mode} from 'aws-cdk/lib/api/aws-auth/credentials';
-import {SDK} from 'aws-cdk/lib/api/util/sdk';
-import * as cfn from 'aws-cdk/lib/api/util/cloudformation';
+import * as cxapi from "@aws-cdk/cx-api";
+import * as colors from "colors/safe";
 
-export interface CdkProps {
-  app: core.App;
-  name: string;
-  exclusively: boolean;
-  tags: Tag[];
-}
+import { SdkProvider } from "aws-cdk/lib/api/aws-auth";
+import { AppStacks } from "aws-cdk/lib/api/cxapp/stacks";
+import { CloudFormationDeploymentTarget, DEFAULT_TOOLKIT_STACK_NAME } from "aws-cdk/lib/api/deployment-target";
+import { CdkToolkit } from "aws-cdk/lib/cdk-toolkit";
+import { cliInit, printAvailableTemplates } from "aws-cdk/lib/init";
+import { data, print } from "aws-cdk/lib/logging";
+import { Configuration } from "aws-cdk/lib/settings";
+import * as version from "aws-cdk/lib/version";
 
-export async function deployStack(props: CdkProps): Promise<CloudFormation.Stack> {
-  const cdkUtil = await CdkUtil.create(props);
-  await cdkUtil.deploy();
-  return await cdkUtil.describe();
-}
+export async function CdkUtil(app: any, command: string, args: any): Promise<number | string | {} | void> {
+  const aws = await SdkProvider.withAwsCliCompatibleDefaults({ ec2creds: true });
 
-export async function destroyStack(props: CdkProps): Promise<void> {
-  const cdkUtil = await CdkUtil.create(props);
-  await cdkUtil.destroy();
-}
+  const configuration = new Configuration({});
+  await configuration.load();
 
-/** CDK context */
-class CdkUtil {
+  const provisioner = new CloudFormationDeploymentTarget({ aws });
 
-  // Factory method
-  static async create(props: CdkProps): Promise<CdkUtil> {
-    const cdkUtil = new CdkUtil(props);
-    await cdkUtil.config.load();
-    return cdkUtil;
+  const appStacks = new AppStacks({
+    verbose: false,
+    ignoreErrors: false,
+    strict: false,
+    configuration,
+    aws,
+    synthesizer: async () => app.synth(),
+  });
+
+  const toolkitStackName: string = configuration.settings.get(["toolkitStackName"]) || DEFAULT_TOOLKIT_STACK_NAME;
+
+  if (toolkitStackName !== DEFAULT_TOOLKIT_STACK_NAME) {
+    print(`Toolkit stack: ${colors.bold(toolkitStackName)}`);
   }
 
-  private readonly aws: SDK;
+  args.STACKS = args.STACKS || [];
+  args.ENVIRONMENTS = args.ENVIRONMENTS || [];
 
-  private readonly config: Configuration;
+  const cli = new CdkToolkit({ appStacks, provisioner });
 
-  private readonly appStacks: AppStacks;
+  switch (command) {
+    case "diff":
+      return await cli.diff({
+        stackNames: args.STACKS,
+        exclusively: args.exclusively,
+        templatePath: args.template,
+        strict: args.strict,
+        contextLines: args.contextLines,
+        fail: args.fail || !configuration.context.get(cxapi.ENABLE_DIFF_NO_FAIL),
+      });
 
-  private readonly cdkToolkit: CdkToolkit;
+    case "deploy":
+      const parameterMap: { [name: string]: string | undefined } = {};
+      for (const parameter of args.parameters) {
+        if (typeof parameter === "string") {
+          const keyValue = (parameter as string).split("=", 2);
+          parameterMap[keyValue[0]] = keyValue[1];
+        }
+      }
+      return await cli.deploy({
+        stackNames: args.STACKS,
+        exclusively: args.exclusively,
+        toolkitStackName,
+        roleArn: args.roleArn,
+        notificationArns: args.notificationArns,
+        requireApproval: configuration.settings.get(["requireApproval"]),
+        reuseAssets: args["build-exclude"],
+        tags: configuration.settings.get(["tags"]),
+        sdk: aws,
+        execute: args.execute,
+        force: args.force,
+        parameters: parameterMap,
+      });
 
-  private constructor(private readonly props: CdkProps) {
+    case "destroy":
+      return await cli.destroy({
+        stackNames: args.STACKS,
+        exclusively: args.exclusively,
+        force: args.force,
+        roleArn: args.roleArn,
+        sdk: aws,
+      });
 
-    this.aws = new SDK({ec2creds: true});
+    case "init":
+      const language = configuration.settings.get(["language"]);
+      if (args.list) {
+        return await printAvailableTemplates(language);
+      } else {
+        return await cliInit(args.TEMPLATE, language, undefined, args.generateOnly);
+      }
+    case "version":
+      return data(version.DISPLAY_VERSION);
 
-    this.config = new Configuration({});
-
-    this.appStacks = new AppStacks({
-      aws: this.aws,
-      configuration: this.config,
-      synthesizer: async () => this.props.app.synth(),
-      ignoreErrors: false,
-      verbose: true,
-      strict: true,
-    });
-
-    this.cdkToolkit = new CdkToolkit({
-      provisioner: new CloudFormationDeploymentTarget({
-        aws: this.aws
-      }),
-      appStacks: this.appStacks
-    });
-  }
-
-  public async deploy() {
-    const {name, exclusively} = this.props;
-    console.info(`+++ Deploying AWS CDK app ${name} exclusively ${exclusively}`);
-
-    await this.cdkToolkit.deploy({
-      sdk: this.aws,
-      stackNames: [this.props.name],
-      exclusively: this.props.exclusively,
-      tags: this.props.tags,
-      // roleArn: args.roleArn,
-      requireApproval: RequireApproval.Never,
-      // ci: args.ci,
-      // reuseAssets: args['build-exclude'],
-    });
-  }
-
-  public async destroy() {
-    const {name, exclusively} = this.props;
-    console.info(`--- Destroying AWS CDK app ${name} exclusively ${exclusively}`);
-
-    await this.cdkToolkit.destroy({
-      sdk: this.aws,
-      // roleArn: args.roleArn,
-      stackNames: [this.props.name],
-      exclusively: this.props.exclusively,
-      force: true,
-    });
-  }
-
-  public async describe(): Promise<CloudFormation.Stack> {
-    const artifactList = await this.appStacks.selectStacks([this.props.name], {
-      extend: this.props.exclusively ? ExtendedStackSelection.None : ExtendedStackSelection.Upstream,
-      defaultBehavior: DefaultSelection.OnlySingle
-    });
-
-    if (artifactList.length === 0) {
-      throw Error(`No stacks found by name ${this.props.name}`);
-    }
-
-    const artifact = artifactList[0];
-    const cfnClient = await this.aws.cloudFormation(
-      artifact.environment.account,
-      artifact.environment.region,
-      Mode.ForWriting);
-
-    return await cfn.describeStack(cfnClient, this.props.name);
+    default:
+      throw new Error("Unknown command: " + command);
   }
 }
 
+export default CdkUtil;

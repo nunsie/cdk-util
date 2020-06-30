@@ -25,11 +25,11 @@
     "aws"
   ],
   "devDependencies": {
-    "@aws-cdk/core": "1.30.0",
-    "@aws-cdk/cx-api": "1.30.0",
-    "@aws-cdk/region-info": "1.30.0",
-    "@aws-cdk/aws-sns": "1.30.0",
-    "aws-cdk": "1.30.0",
+    "@aws-cdk/core": "1.31.0",
+    "@aws-cdk/cx-api": "1.31.0",
+    "@aws-cdk/region-info": "1.31.0",
+    "@aws-cdk/aws-sns": "1.31.0",
+    "aws-cdk": "1.31.0",
     "@babel/cli": "^7.7.0",
     "@babel/core": "^7.7.0",
     "@babel/plugin-proposal-class-properties": "^7.7.0",
@@ -54,7 +54,7 @@
     "typescript": "^3.7.2"
   },
   "peerDependencies": {
-    "aws-cdk": "1.30.0"
+    "aws-cdk": "1.31.0"
   },
   "dependencies": {}
 }
